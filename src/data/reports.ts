@@ -132,3 +132,6 @@ export function printedRange(r: LabResult): string {
 export function fmtValue(r: LabResult): string {
   return r.value === null ? 'unreadable' : fmt(r.value, r)
 }
+
+// A synthetic photo for the demo. Nothing is ever read from it.
+export const DEMO_PHOTO = { name: 'IMG_2041.jpg', mime: 'image/jpeg', size: 2_400_000 }

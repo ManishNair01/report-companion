@@ -201,3 +201,14 @@ td.bad { color: #a63420; font-weight: 700; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+.pdf-icon.photo-icon { background: var(--teal); }
+.picker .pdf-card.photo { border-style: dashed; }
+.file-pick { display: block; margin-bottom: 0.7rem; }
+.loadsel { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; }
+.loadsel small { width: 100%; }
+.loadsel button { flex: 1; text-transform: capitalize; }
+.loadsel button.on { background: var(--amber); border-color: var(--amber); }
+.loadbar { border: 1px solid var(--line); border-radius: 0.6rem; padding: 0.5rem 0.9rem; margin-bottom: 0.9rem; display: flex; gap: 1rem; flex-wrap: wrap; background: var(--card); }
+.loadbar.busy, .loadbar.overloaded { background: var(--amber-bg); color: var(--amber-ink); border-color: var(--amber); }
+.accountability { margin: 0.5rem 0 0.9rem; }
+.accountability li { margin: 0.3rem 0; }

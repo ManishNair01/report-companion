@@ -1,0 +1,150 @@
+/* ==========================================================================
+   Theme layer adopted from drlal_mvp.html: shared tokens, light and dark,
+   44px pill buttons, numbered section headings, label | content trace rows,
+   red used only for critical or human handoff, amber for abnormal.
+   Raw amber #B7791F fails as text, so it is used only as a border or dot.
+   Loaded after styles.css, so it overrides it.
+   ========================================================================== */
+:root {
+  --bg: #f5f2ea; --card: #ffffff; --card2: #efebdf; --ink: #0f2a33; --muted: #4a5f66; --line: #d9d3c4;
+  --brand: #14705f; --on-brand: #ffffff; --brand-tint: #ddefe8; --bub: #ddefe8; --bubin: #ffffff;
+  --red-text: #b03a25; --red-tint: #fbe9e5; --on-red: #ffffff;
+  --amber-text: #7a4e08; --amber-tint: #fbf1dc; --amber-fill: #8a5a0b; --on-amber: #ffffff;
+  --head: #0f2a33; --focus: #0f5bd8;
+  --font: system-ui, -apple-system, 'Segoe UI', 'Nirmala UI', 'Noto Sans Devanagari', 'Kohinoor Devanagari', Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Consolas, Menlo, monospace;
+  /* alias the original variable names onto the tokens */
+  --teal: var(--head); --green: var(--brand); --cream: var(--bg); --amber-bg: var(--amber-tint); --amber-ink: var(--amber-text);
+  --red-bg: var(--red-tint); --green-bg: var(--brand-tint);
+  font-family: var(--font);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1a20; --card: #12272f; --card2: #183540; --ink: #e8efea; --muted: #a3b7bd; --line: #274149;
+    --brand: #4db89f; --on-brand: #08161b; --brand-tint: #173b36; --bub: #1c4a41; --bubin: #12272f;
+    --red: #ff8a73; --red-text: #ff9c88; --red-tint: #3a1c18; --on-red: #2a0d08;
+    --amber: #e0b04a; --amber-text: #ebc672; --amber-tint: #33270f; --amber-fill: #e0b04a; --on-amber: #1a1204;
+    --head: #06120f; --focus: #8db4ff;
+    color-scheme: dark;
+  }
+}
+body { background: var(--bg); color: var(--ink); line-height: 1.55; }
+:focus-visible { outline: 3px solid var(--focus) !important; outline-offset: 2px; }
+.muted, .small { color: var(--muted); }
+
+/* pill buttons, 44px touch targets */
+button { min-height: 44px; min-width: 44px; border-radius: 22px; padding: 0.5rem 1rem; border-width: 1.5px; background: var(--card); color: var(--ink); }
+@media (prefers-reduced-motion: no-preference) { button { transition: background-color 0.15s, border-color 0.15s; } }
+button.primary, .composer button, .tab.active, .ghost.on, .subtabs .on { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
+.tab, .ghost { color: #f5f2ea; border-color: #35525b; background: transparent; }
+.tab.active { background: var(--brand); color: var(--on-brand); font-weight: 700; }
+.ghost.on { background: var(--brand); color: var(--on-brand); }
+.quick button, .picker .pdf-card { border-radius: 14px; }
+.quick button { background: var(--card); color: var(--brand); border-color: var(--brand); }
+.quick button:hover { background: var(--brand-tint); }
+.tools button { min-height: 40px; border-radius: 12px; }
+
+/* header and banner */
+.topnav { background: var(--head); border-bottom: 1px solid var(--line); color: #f5f2ea; }
+.brand-mark { background: var(--brand); color: var(--on-brand); }
+.brand small, .topnav small { color: #c9d6d4; }
+.banner { background: var(--amber-tint); color: var(--amber-text); border-bottom: 1px solid var(--amber); font-size: 0.85rem; font-weight: 600; }
+
+/* cards and numbered section headings, e.g. "1. Choose a demo report" */
+.panel, .case, .cb, .closed-row, .counts > div, .killswitch, .table-wrap { background: var(--card); border-color: var(--line); color: var(--ink); }
+.panel > h2, .dash h2 { font-size: 0.82rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.4; }
+.dash h2 .muted { text-transform: none; letter-spacing: 0; }
+.trace { border-top: 4px solid var(--brand); }
+kbd { background: var(--card2); border-color: var(--line); color: var(--ink); }
+.pdf-meta { color: var(--muted); }
+.picker .pdf-card.selected { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand) inset; }
+.pdf-icon { background: var(--red); color: var(--on-red); }
+
+/* chat: flat bordered bubbles, brand-coloured ticks */
+.phone { background: var(--card2); border-color: var(--head); }
+.phone-head { background: var(--head); border-bottom: 1px solid var(--line); }
+.avatar { background: var(--brand); color: var(--on-brand); }
+.chat { background: var(--card2); }
+.bubble { box-shadow: none; border: 1px solid var(--line); line-height: 1.55; overflow-wrap: anywhere; }
+.bubble.in { background: var(--bubin); color: var(--ink); border-top-left-radius: 4px; }
+.bubble.out { background: var(--bub); color: var(--ink); border-top-right-radius: 4px; }
+.bubble.critical { border-left: 4px solid var(--red); }
+.bubble.statusbar { background: var(--red-tint); border-color: var(--red); color: var(--ink); }
+.meta { color: var(--muted); }
+.ticks { color: var(--brand); }
+.ticks.read { color: var(--focus); }
+.sys { background: var(--card); color: var(--muted); border: 1px solid var(--line); }
+.attach { background: var(--card2); }
+.chip { background: var(--brand-tint); color: var(--brand); border: 1px solid var(--brand); }
+.composer { background: var(--card); border-top: 1px solid var(--line); }
+.composer input { background: var(--card2); color: var(--ink); border-color: var(--line); }
+.typing i { background: var(--muted); }
+.sup-tag { background: var(--amber-tint); color: var(--amber-text); }
+
+/* trace: numbered label | content rows; a red block only for critical or human handoff */
+.steps { counter-reset: step; gap: 0; }
+.step { counter-increment: step; display: grid; grid-template-columns: 1.6rem 6.5rem minmax(0, 1fr); gap: 0.75rem; background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0.75rem 0; overflow-wrap: anywhere; opacity: 1; }
+.step:last-child { border-bottom: 0; }
+.step.idle { opacity: 0.45; }
+.step.ok, .step.warn { border-left: 0; background: transparent; }
+.step-body { display: contents; }
+.step-label { grid-column: 2; font-weight: 700; font-size: 0.8rem; color: var(--brand); text-transform: uppercase; letter-spacing: 0.04em; line-height: 1.8; }
+.step-label::before { content: counter(step) '. '; }
+.step-lines { grid-column: 3; display: grid; gap: 0.1rem; }
+.step-icon { background: var(--card2); color: var(--muted); }
+.step.running .step-icon, .step.ok .step-icon { background: var(--brand); color: var(--on-brand); }
+.step.warn .step-icon { background: var(--amber-tint); color: var(--amber-text); border: 1px solid var(--amber); }
+.step.fail .step-icon { background: var(--red); color: var(--on-red); }
+.step.fail { background: var(--red-tint); border: 1px solid var(--red); border-left-width: 6px; border-radius: 12px; padding: 0.75rem; margin: 0.5rem 0; }
+.step.fail .step-label { color: var(--red-text); }
+@media (max-width: 480px) {
+  .step { grid-template-columns: 1.6rem minmax(0, 1fr); }
+  .step-label, .step-lines { grid-column: 2; }
+}
+.line { font-size: 0.9rem; }
+.line.ok { color: var(--brand); }
+.line.fail, .line.crit { color: var(--red-text); font-weight: 700; }
+.line.warn { color: var(--amber-text); }
+.line.muted { color: var(--muted); }
+.pill.amber { background: var(--amber-tint); color: var(--amber-text); border: 1px solid var(--amber); }
+.pill.red { background: var(--red-tint); color: var(--red-text); border: 1px solid var(--red); }
+
+/* tier tags: always a text label, colour is secondary */
+.tier { display: inline-block; padding: 0.1rem 0.75rem; border-radius: 12px; font-weight: 700; font-size: 0.82rem; border: 1.5px solid transparent; }
+.tier.t-NORMAL { background: var(--brand-tint); color: var(--brand); border-color: var(--brand); }
+.tier.t-ABNORMAL, .tier.t-HUMAN { background: var(--amber-tint); color: var(--amber-text); border-color: var(--amber); }
+.tier.t-CRITICAL { background: var(--red); color: var(--on-red); border-color: var(--red); text-transform: uppercase; letter-spacing: 0.04em; }
+code { font-family: var(--mono); background: var(--card2); border: 1px solid var(--line); border-radius: 6px; padding: 0 0.35rem; }
+
+/* dashboard */
+.case.risk { background: var(--amber-tint); }
+.case.breach { background: var(--red-tint); }
+.sla.ok .sla-time, .sla.breach .sla-time, .sla.breach .sla-sub { color: var(--red-text); }
+.sla.risk .sla-time, .sla.risk .sla-sub { color: var(--amber-text); }
+.sla.done .sla-time { color: var(--brand); }
+.sla-sub { color: var(--muted); }
+.status { background: var(--red-tint); color: var(--red-text); border: 1px solid var(--red); }
+.status.s-Calling, .status.s-No-answer, .status.s-Retry-due, .status.s-Escalated { background: var(--amber-tint); color: var(--amber-text); border-color: var(--amber); }
+.status.s-Reached { background: var(--brand-tint); color: var(--brand); border-color: var(--brand); }
+.tag.red { background: var(--red); color: var(--on-red); }
+.critbox { background: var(--red-tint); }
+.aibox { background: var(--brand-tint); border-color: var(--brand); }
+.aibox-label { color: var(--brand); }
+.call { background: var(--card); }
+.note, .loadbar.busy, .loadbar.overloaded { background: var(--amber-tint); color: var(--amber-text); border-color: var(--amber); }
+.cb.urgent { background: var(--red-tint); }
+th { background: var(--card2); color: var(--ink); }
+td.bad { color: var(--red-text); }
+.loadbar { background: var(--card); }
+.toast { background: var(--head); color: #f5f2ea; border-left-color: var(--brand); }
+.toast.crit { background: var(--red); color: var(--on-red); }
+.toast.warn { background: var(--amber-tint); color: var(--amber-text); }
+.tools { background: var(--head); color: #f5f2ea; }
+.tools button { background: var(--card2); color: var(--ink); border-color: var(--line); }
+.tools button.on { background: var(--red); color: var(--on-red); border-color: var(--red); }
+.loadsel button.on { background: var(--amber-fill); color: var(--on-amber); border-color: var(--amber-fill); }
+.badge { background: var(--red); color: var(--on-red); }
+
+/* desktop: sticky phone, as in the reference */
+@media (min-width: 1251px) { .stage .phone { position: sticky; top: 1rem; } }

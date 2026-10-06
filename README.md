@@ -23,6 +23,7 @@ npm run lint
 | `1` `2` `3` | Pick the normal, out-of-range or critical report |
 | `D` / `P` | Open the dashboard / the patient view |
 | `R` | Reset demo (clears localStorage) |
+| `4` | Send a photo instead of a PDF (goes to a person) |
 | `T` | Show or hide the hidden **Presenter tools** (see below) |
 
 Also in the top bar: **Presentation mode** (larger type for a projector) and **Dashboard window** (opens the dashboard in a second window, synced live over BroadcastChannel).
@@ -62,7 +63,24 @@ Say once at the start: *"Rules decide the route. The model only explains, after 
 - **Inject unsafe message**: the next outgoing message gets an invented number, banned wording and a medicine instruction. The output checks turn red and the safe template `HANDOFF-01` is sent instead.
 - **Fast-forward SLA** to "At risk" (under 10 minutes, amber) and to "Breached" (red, toast, "Escalated to supervisor" audit line).
 - **Amend sent report**: sends a correction message, marks the earlier explanation "Superseded" and writes an audit line.
+- **Send a photo instead of a PDF**: the intake gate refuses to read it and routes to a person.
+- **Simulated load** (normal, busy, overloaded): overloaded defers standard explanations; the critical path is never deferred.
 - **Load incomplete report**: an unknown test with no printed range. The whole report goes to a human and nothing is explained.
+
+## Hard questions, and where the code answers them
+
+Each question a sceptical client asks maps to a guardrail you can show in the app.
+
+| Question | Guardrail | Where | Show it |
+| --- | --- | --- | --- |
+| Can this handle 30 million patients? | Routing and output checks are stateless pure functions, so they scale by running copies. What does not scale is a per-call model and the humans. So: a **priority lane** (critical results, emergency wording) is never shed; standard explanations degrade to scripted-only (*busy*), then to a "we will message you later" notice (*overloaded*); a per-patient **rate limit** (6 messages per 10 seconds, emergency and STOP exempt); an **idempotent** critical case, so a re-sent report never opens a second case or restarts the SLA clock. | `src/engine/capacity.ts`, `createCase` in the store | `T`, then **Simulated load**. Pick 🟢 under *overloaded* (deferred), then 🔴 (still escalates). |
+| What if a patient sends a photo instead of a PDF? | **Intake gate.** Only a lab-issued PDF enters the pipeline. A photo, wrong type, empty or oversized file routes to a human. Nothing is read, extracted or explained, because a misread digit on a critical value would be explained as normal. The reply still says to call 112 if very unwell. | `src/engine/intake.ts` | Key `4`, or the file picker. |
+| Why not build this ourselves? | Not a code guardrail. The code makes the choice cheap to reverse: the safety logic (rules, checks, template registry, audit log) is plain vendor-neutral TypeScript with no dependencies, you can own it, and the explainer sits behind `explain()` so any model can be swapped in. What you would be buying is the sign-off process, the clinical protocol and the operating discipline, not the 600 lines. | `src/engine/` | Say it. |
+| What if the AI does not understand the question? | Free text is placed by an **intent** function. Anything it cannot place gets one gentle fallback. A second miss in a row stops guessing and hands over to an advisor, with a callback. Emergency wording is checked first, before everything else. Other scripts and symbols count as not understood. | `src/engine/intent.ts` | Type `asdf` twice. |
+| Who is legally accountable for wrong information? | Code cannot assign liability, and this is not legal advice: the contract does. What code can do is make accountability *traceable*. Every template has a named **owner** and a **sign-off status**. In `production` release mode a template that the medical director has not approved **cannot be sent** (a new output check). The assistant only restates the signed report and never changes the record. The audit export lists who answers for what, the engine version and every template version. | `templates.ts`, `checks.ts` (`signoff`), `accountability.ts` | Dashboard, Audit tab, **Who is accountable for what**, then **Export JSON**. |
+| Why would patients use this instead of Google or ChatGPT? | Grounding. The assistant speaks only about *this patient's* signed report, and a **grounding check** blocks any message that mentions a test not in that report. Diagnosis, medicine and general-health questions are refused and handed to a person. Critical values go to a doctor in 30 minutes, which a general chatbot cannot do. The value is the signed data, the human escalation and the audit trail, not better prose. | `checks.ts` (`grounded`), `intent.ts` | Type `is this dangerous`. |
+
+**Honest limits.** This demo cannot prove 30 million. The load levels are simulated and nothing here has been load-tested. A real deployment needs queues, autoscaling and a load test. The intake gate stands in for fetching reports straight from the lab system by visit ID, which is the real fix for photos. Intent matching is keyword rules, not understanding. Sign-off is shown as *demo, pending* and release mode is fixed to `demo` in `src/engine/templates.ts`.
 
 ## What is real and what is scripted
 

@@ -1,4 +1,5 @@
 import type { ReportId } from '../data/reports'
+import type { LoadLevel } from '../engine/capacity'
 import type { Route } from '../engine/classify'
 import type { MessageKind, QuickReplyDef } from '../engine/types'
 
@@ -110,6 +111,9 @@ export interface AppState {
   paused: { all: boolean; templates: Record<string, boolean> }
   devInject: boolean
   lang: 'en' | 'hi'
+  load: LoadLevel
+  deferred: number // explanations deferred under load
+  misses: number // consecutive free-text messages the assistant could not place
 }
 
 // Per-window only. Not persisted, not synced.

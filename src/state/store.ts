@@ -1,10 +1,15 @@
 import { REPORTS, fmtValue, printedRange } from '../data/reports'
 import type { Report, ReportId } from '../data/reports'
+import { admit, rateCheck, RATE_WINDOW_MS } from '../engine/capacity'
+import type { LoadLevel } from '../engine/capacity'
 import { allPass, runChecks } from '../engine/checks'
 import type { CheckResult } from '../engine/checks'
 import { classifyReport } from '../engine/classify'
 import type { Classification, Route } from '../engine/classify'
 import * as X from '../engine/explain'
+import { MAX_MISSES, classifyIntent } from '../engine/intent'
+import { validateUpload } from '../engine/intake'
+import type { UploadMeta } from '../engine/intake'
 import { EXPLANATION_TEMPLATE_IDS, SIGNOFF_LABEL, getTemplate } from '../engine/templates'
 import type { Message } from '../engine/types'
 import type {
@@ -66,7 +71,7 @@ function seedCases(): CaseRec[] {
 export function initialState(): AppState {
   return {
     v: 1, messages: [consentChat()], trace: null, activeReportId: null, route: null, verified: false, pendingVerify: null,
-    stopped: false, cases: seedCases(), callbacks: [], audit: [], toasts: [], paused: { all: false, templates: {} }, devInject: false, lang: 'en',
+    stopped: false, cases: seedCases(), callbacks: [], audit: [], toasts: [], paused: { all: false, templates: {} }, devInject: false, lang: 'en', load: 'normal', deferred: 0, misses: 0,
   }
 }
 
@@ -75,7 +80,7 @@ function loadState(): AppState {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const s = JSON.parse(raw) as AppState
-      if (s && s.v === 1) return { ...s, lang: s.lang ?? 'en' }
+      if (s && s.v === 1) return { ...s, lang: s.lang ?? 'en', load: s.load ?? 'normal', deferred: s.deferred ?? 0, misses: s.misses ?? 0 }
     }
   } catch {
     /* fall through */
@@ -97,6 +102,8 @@ export class Store {
   private listeners = new Set<() => void>()
   private run = 0
   private channel: BroadcastChannel | null = null
+  private stamps: number[] = [] // recent patient message times, for the rate limit
+  private rateNotified = 0
 
   constructor() {
     try {
@@ -303,12 +310,14 @@ export class Store {
     if (!(await this.beat(rid, 600))) return
     this.step('rules', cls.route === 'CRITICAL' ? 'fail' : cls.route === 'NORMAL' ? 'ok' : 'warn', this.ruleLines(report, cls))
 
+    const adm = admit(this.s.load, cls.route)
     this.step('route', 'running')
     if (!(await this.beat(rid))) return
     this.step('route', cls.route === 'CRITICAL' ? 'fail' : cls.route === 'NORMAL' ? 'ok' : 'warn', [
       { text: `Route: ${cls.route}`, tone: cls.route === 'CRITICAL' ? 'crit' : cls.route === 'NORMAL' ? 'ok' : 'warn' },
       ...cls.reasons.map((r): TraceLine => ({ text: r, tone: 'muted' })),
       { text: 'Decided by rules. The model was not involved.', tone: 'muted' },
+      { text: `Lane: ${adm.lane} · ${adm.reason}`, tone: 'muted' },
     ])
     if (cls.route === 'CRITICAL') this.createCase(report)
     this.audit({ action: `Route decided: ${cls.route}` })
@@ -334,6 +343,15 @@ export class Store {
     const explains = route === 'NORMAL' || route === 'ABNORMAL'
     const tplId = route === 'NORMAL' ? 'NORM-01' : 'OOR-01'
     const pausedBy = explains ? (this.s.paused.all ? 'all' : this.s.paused.templates[tplId] ? 'template' : null) : null
+
+    const adm = admit(this.s.load, route)
+    if (!adm.admit) {
+      this.step('built', 'warn', [{ text: `Deferred: ${adm.reason}`, tone: 'warn' }, { text: 'Load level is set by operations. The explanation will follow.', tone: 'muted' }])
+      this.set((s) => ({ ...s, deferred: s.deferred + 1 }))
+      this.audit({ action: 'Explanation deferred under load (standard lane)' })
+      await this.buildCheckSend(rid, report, route, [X.deferredMessage(report)])
+      return
+    }
 
     if (pausedBy) {
       this.step('built', 'warn', [{ text: 'Paused by clinical team', tone: 'warn' }, { text: pausedBy === 'all' ? 'Whole-service switch is on' : `Template ${tplId} switch is on`, tone: 'muted' }])
@@ -363,6 +381,11 @@ export class Store {
   }
 
   private createCase(report: Report) {
+    // Idempotent: the same report arriving twice must not open a second case or restart the SLA clock.
+    if (this.s.cases.some((c) => c.visitId === report.visitId && !c.historical && c.status !== 'Reached')) {
+      this.audit({ action: 'Duplicate critical report ignored: case already open' })
+      return
+    }
     const cls = classifyReport(report)
     const critIdx = cls.results.findIndex((r) => r.status === 'critical-high' || r.status === 'critical-low')
     const cr = report.results[critIdx]
@@ -457,45 +480,105 @@ export class Store {
     }
   }
 
-  private static EMERGENCY = /(chest\s+pain|can'?t\s+breathe|cannot\s+breathe|can not breathe|short(ness)? of breath|difficulty breathing|faint(ing|ed)?|severe bleeding|bleeding (a lot|heavily)|unconscious|seizure|heart attack|stroke|in distress|emergency)/i
-  private static MEDICAL = /(do i have|diabet|cancer|disease|diagnos|tablet|pill|medicine|medication|\bdose\b|\bdrug|prescri|treat|cure|insulin|what should i take|which .*(take|use))/i
 
   async sendText(text: string) {
     const t = text.trim()
     if (!t || this.s.stopped) return
+    const { intent, reason } = classifyIntent(t)
     this.addPatient(t)
     const base: TraceLine[] = [{ text: 'Free text received (content not stored in the audit log)', tone: 'muted' }]
     const rules = (line: string): TraceLine[] => [...base, { text: line }]
+    const setMisses = (n: number) => {
+      if (this.s.misses !== n) this.set((s) => ({ ...s, misses: n }))
+    }
 
-    // 1. Emergency wording runs before anything else.
-    if (Store.EMERGENCY.test(t)) {
+    // 1. Rate limit. Emergency wording and STOP are exempt, so a flood can never block a cry for help.
+    if (intent !== 'emergency' && intent !== 'stop') {
+      const rc = rateCheck(this.stamps, Date.now())
+      this.stamps = rc.stamps
+      if (!rc.allowed) {
+        if (Date.now() - this.rateNotified < RATE_WINDOW_MS) return
+        this.rateNotified = Date.now()
+        this.audit({ action: 'Patient rate-limited (too many messages)' })
+        return this.respond('Free text: rate limit', rules('More than 6 messages in 10 seconds'), 'Guardrail: rate limit', [X.rateLimitMessage()], 'Free text')
+      }
+    }
+
+    // 2. Emergency wording runs before anything else.
+    if (intent === 'emergency') {
+      setMisses(0)
       this.audit({ action: 'Patient free text: emergency wording detected' })
       this.addCallback('urgent', 'Patient used emergency wording', true)
-      return this.respond('Free text: emergency check', rules('Emergency wording matched'), 'Guardrail: emergency, runs first', [X.urgentMessage()], 'Free text')
+      return this.respond('Free text: emergency check', rules(reason), 'Guardrail: emergency, runs first', [X.urgentMessage()], 'Free text')
     }
-    // 2. Opt-out.
-    if (/^\s*stop\s*[.!]?\s*$/i.test(t)) {
+    // 3. Opt-out.
+    if (intent === 'stop') {
       this.audit({ action: 'Patient opted out (STOP)' })
-      await this.respond('Free text: STOP', rules('Opt-out keyword'), 'Guardrail: opt-out', [X.stopMessage()], 'Opt-out')
+      await this.respond('Free text: STOP', rules(reason), 'Guardrail: opt-out', [X.stopMessage()], 'Opt-out')
       this.set((s) => ({ ...s, stopped: true }))
       return
     }
     this.audit({ action: 'Patient sent free text' })
-    // 3. Critical thread: repeat status, discuss nothing.
+    // 4. Critical thread: repeat status, discuss nothing.
     if (this.s.route === 'CRITICAL') {
       return this.respond('Free text on the critical thread', rules('Critical thread: no discussion'), 'Guardrail: critical thread', [X.criticalThreadMessage()], 'Free text')
     }
-    // 4. Advisor request.
-    if (/\badvisor\b/i.test(t)) {
+    // 5. Advisor request.
+    if (intent === 'advisor') {
+      setMisses(0)
       this.addCallback('advisor', 'Patient typed advisor')
-      return this.respond('Free text: advisor', rules('Advisor keyword'), 'Guardrail: handoff', [X.advisorConfirm()], 'Free text')
+      return this.respond('Free text: advisor', rules(reason), 'Guardrail: handoff', [X.advisorConfirm()], 'Free text')
     }
-    // 5. Diagnosis or medicine question.
-    if (Store.MEDICAL.test(t)) {
-      return this.respond('Free text: diagnosis or medicine question', rules('Diagnosis / medicine pattern matched'), 'Guardrail: refusal template', [X.refusalMessage()], 'Free text')
+    // 6. Diagnosis, medicine or general-health question. Answers come from the signed report only.
+    if (intent === 'medical') {
+      setMisses(0)
+      return this.respond('Free text: diagnosis, medicine or general-health question', rules(reason), 'Guardrail: refusal template', [X.refusalMessage()], 'Free text')
     }
-    // 6. Fallback.
-    return this.respond('Free text: unrecognised', rules('No pattern matched'), 'Guardrail: gentle fallback', [X.fallbackMessage()], 'Free text')
+    // 7. Not understood. One gentle fallback, then a person. The assistant never guesses.
+    const misses = this.s.misses + 1
+    const detail = `${reason} (miss ${misses} of ${MAX_MISSES})`
+    if (misses >= MAX_MISSES) {
+      setMisses(0)
+      this.addCallback('human', 'Assistant could not understand the patient twice in a row')
+      return this.respond('Free text: not understood twice', rules(detail), 'Guardrail: handoff after repeated misses', [X.notUnderstoodMessage()], 'Free text')
+    }
+    setMisses(misses)
+    return this.respond('Free text: unrecognised', rules(detail), 'Guardrail: gentle fallback', [X.fallbackMessage()], 'Free text')
+  }
+
+  /** A file from the patient. Only lab-issued digital reports are ever read. Photos and other files go to a person. */
+  async uploadFile(meta: UploadMeta) {
+    if (this.s.stopped) return
+    const rid = ++this.run
+    const verdict = validateUpload(meta)
+    const reason = verdict.ok ? 'Valid PDF, but not matched to a lab-issued report (no visit ID from the lab system)' : verdict.reason
+    this.setUi({ tab: 'patient', typing: false })
+    this.set((s) => ({
+      ...s, activeReportId: null, route: 'HUMAN', verified: false, pendingVerify: null,
+      messages: [s.messages[0]?.templateId === 'CONSENT-01' ? s.messages[0] : consentChat()],
+    }))
+    this.newTrace('Unsupported upload')
+    this.addPatient('', { attachment: meta.name })
+    this.audit({ action: `Patient uploaded a file (${meta.mime || 'unknown type'})` })
+
+    this.step('received', 'running')
+    if (!(await this.beat(rid))) return
+    this.step('received', 'ok', [
+      { text: `${meta.mime || 'unknown type'} · ${Math.round(meta.size / 1024)} KB`, tone: 'muted' },
+      { text: 'File name not shown here', tone: 'muted' },
+    ])
+    this.step('rules', 'running')
+    if (!(await this.beat(rid, 600))) return
+    this.step('rules', 'warn', [
+      { text: `Intake gate: ${reason}`, tone: 'warn' },
+      { text: 'Nothing was read. No value was extracted or explained.', tone: 'muted' },
+    ])
+    this.step('route', 'running')
+    if (!(await this.beat(rid))) return
+    this.step('route', 'warn', [{ text: 'Route: HUMAN', tone: 'warn' }, { text: 'Decided by rules. The model was not involved.', tone: 'muted' }])
+    this.audit({ action: `Route decided: HUMAN (${reason})` })
+    this.addCallback('human', `Upload not read: ${reason}`)
+    await this.buildCheckSend(rid, REPORTS.normal, 'HUMAN', [X.intakeMessage()])
   }
 
   // ---------- actions: dashboard side ----------
@@ -568,6 +651,10 @@ export class Store {
   setPaused(all: boolean) {
     this.set((s) => ({ ...s, paused: { ...s.paused, all } }))
     this.audit({ action: `Clinical team turned AI explanations ${all ? 'OFF' : 'ON'} (whole service)` })
+  }
+  setLoad(load: LoadLevel) {
+    this.set((s) => ({ ...s, load }))
+    this.audit({ action: `Operations set load level to ${load}` })
   }
   setTemplatePaused(id: string, on: boolean) {
     this.set((s) => ({ ...s, paused: { ...s.paused, templates: { ...s.paused.templates, [id]: on } } }))

@@ -1,4 +1,6 @@
 import { useNow, useSnap, useStore } from '../state/AppContext'
+import { ACCOUNTABILITY, buildAuditExport } from '../engine/accountability'
+import { LOAD_LABEL } from '../engine/capacity'
 import { EXPLANATION_TEMPLATE_IDS, getTemplate } from '../engine/templates'
 import { hhmm } from '../state/store'
 import { CaseCard, mmss } from './CaseCard'
@@ -16,7 +18,7 @@ export function Dashboard() {
   const count = (k: string) => state.callbacks.filter((c) => c.kind === k).length
 
   const exportAudit = () => {
-    const blob = new Blob([JSON.stringify(state.audit.map((a) => ({ ...a, time: new Date(a.ts).toISOString() })), null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(buildAuditExport(state.audit), null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = 'report-companion-audit.json'
@@ -31,6 +33,12 @@ export function Dashboard() {
         <div><strong>{openCallbacks.length}</strong><span>Open advisor callbacks</span></div>
         <div><strong>{count('not-helpful')}</strong><span>👎 Not helpful</span></div>
         <div><strong>{count('call-me')}</strong><span>📞 Call me</span></div>
+        <div><strong>{state.deferred}</strong><span>Deferred under load</span></div>
+      </div>
+
+      <div className={`loadbar ${state.load}`} role="status">
+        <strong>Service load: {LOAD_LABEL[state.load]}</strong>
+        <span className="muted">Critical results and emergency wording are never deferred.</span>
       </div>
 
       <div className="killswitch">
@@ -91,6 +99,14 @@ export function Dashboard() {
             <button onClick={exportAudit}>Export JSON</button>
           </div>
           <p className="muted">Names and phone numbers are never written here. Identifiers are visit IDs only.</p>
+          <details className="accountability">
+            <summary>Who is accountable for what</summary>
+            <ul>
+              {ACCOUNTABILITY.map((a) => (
+                <li key={a.item}><strong>{a.item}:</strong> {a.owner}. <span className="muted">{a.note}</span></li>
+              ))}
+            </ul>
+          </details>
           <div className="table-wrap">
             <table>
               <thead><tr><th>Time</th><th>Report</th><th>Route</th><th>Template</th><th>Checks</th><th>Action / note</th></tr></thead>

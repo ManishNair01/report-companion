@@ -136,7 +136,7 @@ export function consentMessage(): Message {
   return msg(
     'CONSENT-01',
     'system',
-    'We will message you about your reports on this number. Your data stays in India. Reply STOP any time to opt out.',
+    'We will message you about your reports on this number. Your data stays in India. Reply STOP any time to opt out.\n\nReports are issued and signed by our pathologists. This assistant only explains them. It does not replace your doctor.',
   )
 }
 
@@ -305,4 +305,41 @@ function abnormalMessagesHi(report: Report): Message[] {
     DISCLAIMER_HI,
   ].join('\n\n')
   return [{ ...intro, text: introText }, { ...details, text: detailsText }]
+}
+
+export function intakeMessage(): Message {
+  return msg(
+    'INTAKE-01',
+    'handoff',
+    [
+      'I can only explain reports sent directly by our lab. I am not able to read photos or files from other sources, so I will not guess at any values.',
+      'A health advisor will call you today between 10 am and 6 pm on the number you registered. If you feel very unwell, please do not wait. Contact your doctor or call 112.',
+    ].join('\n\n'),
+    { chip: '📞 Advisor callback requested' },
+  )
+}
+
+export function notUnderstoodMessage(): Message {
+  return msg(
+    'HANDOFF-02',
+    'handoff',
+    'I am sorry, I am not understanding your message. Rather than guess, I am asking a health advisor to call you today between 10 am and 6 pm on the number you registered.',
+    { chip: '📞 Advisor callback requested' },
+  )
+}
+
+export function deferredMessage(report: Report): Message {
+  return msg(
+    'LOAD-01',
+    'handoff',
+    [
+      `Hi ${report.patient.first}, your report (${report.visitId}) is ready and your signed copy is safe. We are very busy right now, so your explanation will follow later today. Nothing about your report has changed.`,
+      'If you feel very unwell, please do not wait. Contact your doctor or call 112.',
+    ].join('\n\n'),
+    { quickReplies: [{ id: 'download', label: '📄 Download signed report' }] },
+  )
+}
+
+export function rateLimitMessage(): Message {
+  return msg('RATE-01', 'handoff', 'You are sending messages very quickly. Please wait a few seconds. If this is urgent, call 112.')
 }

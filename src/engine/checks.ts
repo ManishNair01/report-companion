@@ -1,6 +1,8 @@
+import { REPORTS } from '../data/reports'
 import type { Report } from '../data/reports'
 import type { Route } from './classify'
-import { getTemplate } from './templates'
+import { RELEASE_MODE, getTemplate } from './templates'
+import type { ReleaseMode } from './templates'
 import type { Message } from './types'
 
 export const DISCLAIMER =
@@ -18,7 +20,7 @@ const NO_VALUES_ALLOWED = [30, 112]
 const PROTOCOL_CONSTANTS = [30, 112]
 
 export interface CheckResult {
-  id: 'registered' | 'numbers' | 'banned' | 'disclaimer' | 'no-values'
+  id: 'registered' | 'signoff' | 'grounded' | 'numbers' | 'banned' | 'disclaimer' | 'no-values'
   label: string
   pass: boolean
   skipped?: boolean
@@ -45,7 +47,11 @@ function reportNumbers(report: Report): Set<number> {
   return s
 }
 
-export function runChecks(message: Message, report: Report, route: Route): CheckResult[] {
+// Every test name the assistant knows. A message may only mention tests that are in the patient's own report.
+const ALL_TEST_NAMES = [...new Set(Object.values(REPORTS).flatMap((r) => r.results.map((x) => x.name)))]
+const escapeRe = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+export function runChecks(message: Message, report: Report, route: Route, mode: ReleaseMode = RELEASE_MODE): CheckResult[] {
   const out: CheckResult[] = []
 
   const tpl = getTemplate(message.templateId)
@@ -57,6 +63,25 @@ export function runChecks(message: Message, report: Report, route: Route): Check
     detail: registered
       ? `${message.templateId} v${message.version}`
       : `No registered template for "${message.templateId}" v${message.version}`,
+  })
+
+  // Accountability gate: in production only a template the medical director approved can be sent.
+  const approved = tpl?.signOff === 'approved'
+  out.push({
+    id: 'signoff',
+    label: 'Template signed off for this release mode',
+    pass: mode === 'demo' || approved,
+    detail: mode === 'demo' ? 'Demo mode: sign-off pending is allowed' : approved ? undefined : `${message.templateId} is not approved for production`,
+  })
+
+  // Grounding: the assistant speaks only about this patient's signed report, never from general knowledge.
+  const own = new Set(report.results.map((r) => r.name))
+  const strays = ALL_TEST_NAMES.filter((n) => !own.has(n) && new RegExp(`\\b${escapeRe(n)}\\b`, 'i').test(message.text))
+  out.push({
+    id: 'grounded',
+    label: 'Mentions only tests in this patient’s report',
+    pass: strays.length === 0,
+    detail: strays.length ? `Not in this report: ${strays.join(', ')}` : undefined,
   })
 
   const allowed = reportNumbers(report)

@@ -4,6 +4,7 @@ import { PhoneChat } from './components/PhoneChat'
 import { ReportPicker } from './components/ReportPicker'
 import { SafetyTrace } from './components/SafetyTrace'
 import { TopNav } from './components/TopNav'
+import { DEMO_PHOTO as PHOTO } from './data/reports'
 import { useNow, useSnap, useStore } from './state/AppContext'
 
 function Toasts() {
@@ -32,6 +33,13 @@ function PresenterTools() {
       <button onClick={() => store.fastForward('breach')}>Fast-forward SLA to “Breached”</button>
       <button onClick={() => store.amendReport()}>Amend sent report (correction)</button>
       <button onClick={() => store.pickReport('incomplete')}>Load incomplete report (goes to a human)</button>
+      <button onClick={() => store.uploadFile(PHOTO)}>Send a photo instead of a PDF (key 4)</button>
+      <div className="loadsel" role="group" aria-label="Simulated load">
+        <small>Simulated load</small>
+        {(['normal', 'busy', 'overloaded'] as const).map((l) => (
+          <button key={l} className={state.load === l ? 'on' : ''} onClick={() => store.setLoad(l)}>{l}</button>
+        ))}
+      </div>
     </aside>
   )
 }
@@ -54,6 +62,7 @@ export default function App() {
         case '1': return void store.pickReport('normal')
         case '2': return void store.pickReport('abnormal')
         case '3': return void store.pickReport('critical')
+        case '4': return void store.uploadFile(PHOTO)
         case 'd': return store.openTab('dashboard')
         case 'p': return store.openTab('patient')
         case 'r': return store.reset()
@@ -66,7 +75,7 @@ export default function App() {
 
   return (
     <div className={ui.presentation ? 'app present' : 'app'}>
-      <div className="banner">Demo with fictional patients and data. Not medical advice.</div>
+      <div className="banner"><b>Demo with fictional patients and data. Not medical advice.</b> Simulated prototype: no real patient data and no live AI call.</div>
       <TopNav />
       {ui.tab === 'patient' ? (
         <div className="stage">

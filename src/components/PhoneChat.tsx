@@ -27,7 +27,9 @@ function Bubble({ m }: { m: ChatMessage }) {
         {m.superseded && <div className="sup-tag">Superseded by a correction</div>}
         {m.attachment && (
           <div className="attach">
-            <span className="pdf-icon small" aria-hidden>PDF</span>
+            <span className={`pdf-icon small ${/\.pdf$/i.test(m.attachment) ? '' : 'photo-icon'}`} aria-hidden>
+              {(m.attachment.split('.').pop() ?? 'FILE').slice(0, 4).toUpperCase()}
+            </span>
             <span>{m.attachment}</span>
           </div>
         )}
@@ -69,7 +71,7 @@ export function PhoneChat() {
         <div className="avatar" aria-hidden>RC</div>
         <div>
           <strong>Report Companion (AI assistant)</strong>
-          <small>Demo Diagnostics Lab · automated</small>
+          <small>AI assistant · approved templates only</small>
         </div>
       </div>
       <div className="chat">

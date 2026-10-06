@@ -1,12 +1,13 @@
-import { DEMO_REPORT_IDS, REPORTS } from '../data/reports'
+import { DEMO_PHOTO as PHOTO, DEMO_REPORT_IDS, REPORTS } from '../data/reports'
 import { useSnap, useStore } from '../state/AppContext'
+
 
 export function ReportPicker() {
   const store = useStore()
   const { state } = useSnap()
   return (
     <section className="panel picker" aria-label="Demo reports">
-      <h2>Choose a demo report</h2>
+      <h2>1. Pick a demo report</h2>
       <p className="muted">Tap a card to upload it in the chat. Keys 1, 2, 3.</p>
       {DEMO_REPORT_IDS.map((id, i) => {
         const r = REPORTS[id]
@@ -29,6 +30,26 @@ export function ReportPicker() {
           </button>
         )
       })}
+      <button className="pdf-card photo" onClick={() => store.uploadFile(PHOTO)} disabled={state.stopped}>
+        <span className="pdf-icon photo-icon" aria-hidden>JPG</span>
+        <span className="pdf-body">
+          <span className="pdf-title">Photo of a printed report</span>
+          <span className="pdf-meta">Not a lab-issued PDF: goes to a person, nothing is read</span>
+        </span>
+        <kbd>4</kbd>
+      </button>
+      <label className="file-pick muted small">
+        Or try any file (only its type and size are checked, it is never opened):{' '}
+        <input
+          type="file"
+          disabled={state.stopped}
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) void store.uploadFile({ name: f.name, mime: f.type, size: f.size })
+            e.target.value = ''
+          }}
+        />
+      </label>
       <p className="muted small">
         Keys: <kbd>D</kbd> dashboard · <kbd>P</kbd> patient · <kbd>R</kbd> reset
       </p>
